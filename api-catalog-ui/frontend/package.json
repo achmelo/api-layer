@@ -51,7 +51,7 @@
         "swagger-ui-react": "5.17.14",
         "url": "0.11.4",
         "util": "0.12.5",
-        "uuid": "10.0.0"
+        "uuid": "11.0.3"
     },
     "scripts": {
         "lint": "eslint \"src/**/*.{js,jsx}\"",
