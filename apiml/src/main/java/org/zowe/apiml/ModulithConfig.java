@@ -13,17 +13,12 @@ package org.zowe.apiml;
 import com.netflix.appinfo.DataCenterInfo;
 import com.netflix.appinfo.InstanceInfo;
 import com.netflix.appinfo.LeaseInfo;
+import com.netflix.discovery.CacheRefreshedEvent;
 import com.netflix.discovery.shared.Application;
 import com.netflix.eureka.EurekaServerContext;
 import com.netflix.eureka.EurekaServerContextHolder;
 import jakarta.annotation.PostConstruct;
-import jakarta.servlet.Filter;
-import jakarta.servlet.FilterChain;
-import jakarta.servlet.Servlet;
-import jakarta.servlet.ServletConfig;
-import jakarta.servlet.ServletException;
-import jakarta.servlet.ServletRequest;
-import jakarta.servlet.ServletResponse;
+import jakarta.servlet.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.catalina.Context;
@@ -47,24 +42,23 @@ import org.springframework.context.annotation.Primary;
 import org.springframework.context.event.EventListener;
 import org.springframework.http.server.reactive.HttpHandler;
 import org.springframework.http.server.reactive.TomcatHttpHandlerAdapter;
+import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.web.context.ServletContextAware;
+import org.zowe.apiml.config.ApplicationInfo;
 import org.zowe.apiml.discovery.ApimlInstanceRegistry;
 import org.zowe.apiml.filter.PreFluxFilter;
 import org.zowe.apiml.message.core.MessageService;
 import org.zowe.apiml.message.yaml.YamlMessageServiceInstance;
 import org.zowe.apiml.product.constants.CoreService;
+import org.zowe.apiml.zaas.security.service.JwtSecurity;
 import reactor.core.publisher.Flux;
 
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 
+@EnableScheduling
 @Configuration
 @RequiredArgsConstructor
 @EnableConfigurationProperties
@@ -86,6 +80,13 @@ public class ModulithConfig {
 
     @Value("${apiml.service.port:10010}")
     private int port;
+
+    @Bean
+    ApplicationInfo applicationInfo() {
+        return ApplicationInfo.builder()
+                .isModulith(true)
+                .authServiceId(CoreService.GATEWAY.getServiceId()).build();
+    }
 
     private InstanceInfo getInstanceInfo(String serviceId) {
         var leaseInfo = LeaseInfo.Builder.newBuilder()
@@ -145,13 +146,17 @@ public class ModulithConfig {
     @EventListener
     public void onApplicationEvent(EurekaRegistryAvailableEvent event) {
         ApimlInstanceRegistry registry = getRegistry();
-        instances.entrySet()
-            .stream()
-            .forEach(entry -> registry.registerStatically(instances.get(entry.getKey()), CoreService.GATEWAY.getServiceId().equals(entry.getKey())));
+        instances.forEach((key, value) -> registry.registerStatically(instances.get(key), CoreService.GATEWAY.getServiceId().equals(key)));
+
+        var jwtSec = applicationContext.getBean(JwtSecurity.class);
+        if (!jwtSec.getZosmfListener().isZosmfReady()) {
+            jwtSec.getZosmfListener().getZosmfRegisteredListener().onEvent(new CacheRefreshedEvent());
+        }
     }
 
+
     @Bean
-    public ReactiveDiscoveryClient registryReactiveDiscoveryClient(DiscoveryClient registryDiscoveryClient) {
+    ReactiveDiscoveryClient registryReactiveDiscoveryClient(DiscoveryClient registryDiscoveryClient) {
         return new ReactiveDiscoveryClient() {
             @Override
             public String description() {
@@ -171,12 +176,12 @@ public class ModulithConfig {
     }
 
     @Bean
-    public RouteRefreshListener routeRefreshListener(ApplicationEventPublisher publisher) {
+    RouteRefreshListener routeRefreshListener(ApplicationEventPublisher publisher) {
         return new RouteRefreshListener(publisher);
     }
 
     @Bean
-    public DiscoveryClient registryDiscoveryClient() {
+    DiscoveryClient registryDiscoveryClient() {
         return new DiscoveryClient() {
             @Override
             public String description() {
@@ -214,7 +219,7 @@ public class ModulithConfig {
     }
 
     @Bean
-    public MessageService messageService() {
+    MessageService messageService() {
         MessageService messageService = YamlMessageServiceInstance.getInstance();
         messageService.loadMessages("/utility-log-messages.yml");
         messageService.loadMessages("/common-log-messages.yml");
@@ -223,12 +228,13 @@ public class ModulithConfig {
         messageService.loadMessages("/gateway-log-messages.yml");
 
         messageService.loadMessages("/apiml-log-messages.yml");
+        messageService.loadMessages("/zaas-log-messages.yml");
         return messageService;
     }
 
     @Bean
     @Primary
-    public TomcatReactiveWebServerFactory tomcatReactiveWebServerWithFiltersFactory(
+    TomcatReactiveWebServerFactory tomcatReactiveWebServerWithFiltersFactory(
         HttpHandler httpHandler,
         List<PreFluxFilter> preFluxFilters,
         List<ServletContextAware> servletContextAwareListeners
@@ -256,7 +262,7 @@ public class ModulithConfig {
      * @return
      */
     @Bean
-    public WebServerFactoryCustomizer<TomcatReactiveWebServerFactory> internalPortCustomizer(
+    WebServerFactoryCustomizer<TomcatReactiveWebServerFactory> internalPortCustomizer(
         @Value("${apiml.internal-discovery.port:10011}") int internalDiscoveryPort
     ) {
         return factory -> {

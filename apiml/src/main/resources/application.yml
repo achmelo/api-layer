@@ -129,6 +129,38 @@ apiml:
         headersToBeCleared: X-Certificate-Public,X-Certificate-DistinguishedName,X-Certificate-CommonName
         ssl:
             nonStrictVerifySslCertificatesOfServices: false
+        filterChainConfiguration: new
+        allowTokenRefresh: false
+        jwtInitializerTimeout: 5
+        personalAccessToken:
+            enabled: false
+        useInternalMapper: false
+        auth:
+            provider: zosmf
+            zosmf:
+                jwtAutoconfiguration: jwt
+        oidc:
+            enabled: false
+            clientId:
+            clientSecret:
+            registry:
+            identityMapperUrl:
+            identityMapperUser:
+            jwks:
+                uri:
+            userInfo:
+                uri:
+            validationType: JWK
+            provider: zosmf
+        x509:
+            enabled: false
+            certificatesUrl:
+            externalMapperUrl:
+        saf:
+            provider: rest
+            urls:
+                authenticate: https://${apiml.service.hostname}:10013/zss/saf/authenticate
+                verify: https://${apiml.service.hostname}:10013/zss/saf/verify
     health:
         protected: true
 server:

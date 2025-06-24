@@ -14,6 +14,8 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nimbusds.jose.jwk.JWKSet;
+import com.nimbusds.jose.util.DefaultResourceRetriever;
+import com.nimbusds.jose.util.Resource;
 import jakarta.annotation.PostConstruct;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -28,7 +30,12 @@ import org.springframework.context.annotation.EnableAspectJAutoProxy;
 import org.springframework.context.annotation.Primary;
 import org.springframework.context.annotation.Scope;
 import org.springframework.context.annotation.ScopedProxyMode;
-import org.springframework.http.*;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.retry.annotation.Backoff;
 import org.springframework.retry.annotation.Retryable;
 import org.springframework.security.authentication.AuthenticationServiceException;
@@ -50,6 +57,7 @@ import org.zowe.apiml.zaas.security.service.TokenCreationService;
 import org.zowe.apiml.zaas.security.service.schema.source.AuthSource;
 
 import javax.management.ServiceNotFoundException;
+
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
@@ -120,6 +128,7 @@ public class ZosmfService extends AbstractZosmfService {
 
     private ZosmfService meAsProxy;
     private TokenCreationService tokenCreationService;
+    private DefaultResourceRetriever resourceRetriever;
 
     public ZosmfService(
             final AuthConfigurationProperties authConfigurationProperties,
@@ -127,7 +136,8 @@ public class ZosmfService extends AbstractZosmfService {
             final ObjectMapper securityObjectMapper,
             final ApplicationContext applicationContext,
             final AuthenticationService authenticationService,
-            List<TokenValidationStrategy> tokenValidationStrategy
+            List<TokenValidationStrategy> tokenValidationStrategy,
+            DefaultResourceRetriever resourceRetriever
     ) {
         super(
                 applicationContext,
@@ -137,6 +147,7 @@ public class ZosmfService extends AbstractZosmfService {
         );
         this.tokenValidationStrategy = tokenValidationStrategy;
         this.authenticationService = authenticationService;
+        this.resourceRetriever = resourceRetriever;
     }
 
     private final AuthenticationService authenticationService;
@@ -555,7 +566,8 @@ public class ZosmfService extends AbstractZosmfService {
         final String url = getURI(getZosmfServiceId(), authConfigurationProperties.getZosmf().getJwtEndpoint());
 
         try {
-            return JWKSet.load(new URL(url));
+            Resource resource = resourceRetriever.retrieveResource(new URL(url));
+            return JWKSet.parse(resource.getContent());
         } catch (ParseException pe) {
             log.debug("Invalid format of public keys from z/OSMF", pe);
         } catch (HttpClientErrorException.NotFound nf) {

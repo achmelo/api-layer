@@ -10,11 +10,14 @@
 
 package org.zowe.apiml.acceptance;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.sun.net.httpserver.Headers;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.TestInstance;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.cloud.gateway.event.RefreshRoutesEvent;
 import org.springframework.context.ApplicationEventPublisher;
 import org.zowe.apiml.gateway.ApplicationRegistry;
@@ -28,6 +31,7 @@ public class AcceptanceTestWithMockServices extends AcceptanceTestWithBasePath {
     private ApplicationEventPublisher applicationEventPublisher;
 
     @Autowired
+    @Qualifier("applicationRegistry")
     protected ApplicationRegistry applicationRegistry;
 
     @BeforeEach
@@ -81,6 +85,21 @@ public class AcceptanceTestWithMockServices extends AcceptanceTestWithBasePath {
     @AfterAll
     void stopMocksWithClassScope() {
         applicationRegistry.afterClass();
+    }
+
+    protected void mockZosmfSuccess() throws JsonProcessingException {
+        var headers = new Headers();
+        headers.add("Set-Cookie", "jwtToken=jwt");
+        headers.add("Set-Cookie", "LtpaToken2=ltpatoken");
+
+        mockService("zosmf").scope(MockService.Scope.TEST)
+            .addEndpoint("/zosmf/info")
+                .responseCode(200)
+                .contentType("application/json")
+                .headers(headers)
+                .bodyJson("{\"zosmf_version\":\"29\",\"zosmf_saf_realm\":\"SAFRealm\",\"zosmf_full_version\":\"29.0\"}")
+        .and()
+            .start();
     }
 
 }

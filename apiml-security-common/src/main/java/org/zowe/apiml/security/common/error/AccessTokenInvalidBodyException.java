@@ -10,13 +10,18 @@
 
 package org.zowe.apiml.security.common.error;
 
+import lombok.Getter;
 import org.springframework.security.core.AuthenticationException;
 
 /**
  * Exception thrown when the request body for Personal Access Token creation is not valid
  */
-public class AccessTokenBodyNotValidException extends AuthenticationException {
-    public AccessTokenBodyNotValidException(String message) {
+@Getter
+public class AccessTokenInvalidBodyException extends AuthenticationException {
+
+    private static final long serialVersionUID = 2846297491901169989L;
+
+    public AccessTokenInvalidBodyException(String message) {
         super(message);
     }
 }

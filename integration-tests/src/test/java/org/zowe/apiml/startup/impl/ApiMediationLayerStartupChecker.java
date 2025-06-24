@@ -47,6 +47,7 @@ public class ApiMediationLayerStartupChecker {
     private final Credentials credentials;
     private final List<Service> servicesToCheck = new ArrayList<>();
     private final String healthEndpoint = "/application/health";
+    private static final boolean IS_MODULITH_ENABLED = Boolean.parseBoolean(System.getProperty("environment.modulith"));
 
     public ApiMediationLayerStartupChecker() {
         gatewayConfiguration = ConfigReader.environmentConfiguration().getGatewayServiceConfiguration();
@@ -54,7 +55,9 @@ public class ApiMediationLayerStartupChecker {
         discoverableClientConfiguration = ConfigReader.environmentConfiguration().getDiscoverableClientConfiguration();
 
         servicesToCheck.add(new Service("Gateway", "$.status"));
-        servicesToCheck.add(new Service("ZAAS", "$.components.gateway.details.zaas"));
+        if (!IS_MODULITH_ENABLED) {
+            servicesToCheck.add(new Service("ZAAS", "$.components.gateway.details.zaas"));
+        }
         servicesToCheck.add(new Service("Api Catalog", "$.components.gateway.details.apicatalog"));
         servicesToCheck.add(new Service("Discovery Service", "$.components.gateway.details.discovery"));
     }
@@ -106,7 +109,7 @@ public class ApiMediationLayerStartupChecker {
                     areAllServicesUp = false;
                 }
             }
-            if (!isAuthUp()) {
+            if (!IS_MODULITH_ENABLED && !isAuthUp()) {
                 areAllServicesUp = false;
             }
 
@@ -150,13 +153,23 @@ public class ApiMediationLayerStartupChecker {
     }
 
     private boolean isAuthUp() {
-        HttpGet requestToZaas = new HttpGet(HttpRequestUtils.getUriFromZaas(healthEndpoint));
+        HttpGet requestToZaas;
+        if (!IS_MODULITH_ENABLED) {
+            requestToZaas = new HttpGet(HttpRequestUtils.getUriFromZaas(healthEndpoint));
+        } else {
+            requestToZaas = new HttpGet(HttpRequestUtils.getUriFromGateway(healthEndpoint));
+        }
         requestToZaas.addHeader("Authorization", "Basic " + Base64.getEncoder().encodeToString(String.format("%s:%s", credentials.getUser(), credentials.getPassword()).getBytes()));
         DocumentContext zaasContext = getDocumentAsContext(requestToZaas);
         if (zaasContext == null) {
             return false;
         }
-        boolean isUp = isServiceUp(zaasContext, "$.components.zaas.details.auth");
+        boolean isUp;
+        if (!IS_MODULITH_ENABLED) {
+            isUp = isServiceUp(zaasContext, "$.components.zaas.details.auth");
+        } else {
+            isUp = isServiceUp(zaasContext, "$.components.gateway.details.auth");
+        }
         logDebug("Authentication Service is {}", isUp);
         return isUp;
     }
